@@ -589,7 +589,7 @@ define(["require"], function (require) {
             citations = get_remaining_bib_entries(citations);
         }
 	create_reference_section(citations);
-	update_refs(citations);
+	//update_refs(citations); //for now I am not using this,
     }
     
     function update_refs(citations) {
@@ -721,38 +721,69 @@ define(["require"], function (require) {
     
     function create_reference_section(citations) {
 	// If there is a References section, replace it:
-	var reference_cell = find_cell("markdown", "#+ *References");
+	var reference_cell = find_cell("markdown", "#+ *References*");
 	var cells = IPython.notebook.get_cells();
 	// default to top-level heading:
-	var references = "# References\n\n";
+	var references = "## References and Further Reading\n\n";
 	if (reference_cell == undefined) {
             reference_cell = IPython.notebook.select(cells.length-1).insert_cell_below("markdown");
 	} else {
 	    // already exists:
-	    references = reference_cell.get_text().match("#+ *References")[0] + "\n\n";
+	    references = reference_cell.get_text().match("#+ *References*")[0] + "\n\n";
 	}
 	var citation;
 	for (citation in citations) {
             var cite = citations[citation];
 	    if (cite != undefined) {
 		var ref_index;
-                if ("REFS" in cite) {
-                    references = references + "<a name=\"" + citation.substring(1) + "\"/><sup>"
 
-                    for (ref_index in cite["REFS"]) {
-                        var refs = cite["REFS"][ref_index]
-                        references += "[^](#ref-" +  refs + ") "
-                    }
-                    references += "</sup>"
+                //if ("REFS" in cite) {
+                    //references = references + "<a name=\"" + citation.substring(1) + "\"/><sup>"
+
+                    //for (ref_index in cite["REFS"]) {
+                        //var refs = cite["REFS"][ref_index]
+                        //references += "[^](#ref-" +  refs + ") "
+                    //}
+                    //references += "</sup>"
+                //}
+
+
+                if ("REFCOUNT" in cite) {
+                    references += ("<a name=\"" + citation.substring(1) + "\" style=\"color: black; text-decoration: none;\">")
+                    references += ("[" + cite["REFCOUNT"] + "]")
+                    references += "</a> "
                 }
-		references += ( tex2html(cite["AUTHOR"]) + ". " + 
-			       cite["YEAR"] + ". _" + tex2html(cite["TITLE"]) + "_.");
-		if (cite["URL"] != undefined) {
+
+                if (cite["AUTHOR"] != undefined && cite["AUTHOR"].size > 0) {
+                    references += (tex2html(cite["AUTHOR"]) + ". ")
+                }
+
+                if (cite["YEAR"] != undefined && cite["YEAR"].size > 0) {
+                    references += (tex2html(cite["YEAR"]) + ". ")
+                }
+
+		references += ("_" + tex2html(cite["TITLE"]) + "_");
+
+                if (cite["JOURNAL"] != undefined) {
+                    references += (", " + tex2html(cite["JOURNAL"]))
+                }
+
+                if (cite["URLDATE"] != undefined) {
+                    references += (", Accessed on " + tex2html(cite["URLDATE"]))
+                }
+
+                references += ". "
+
+
+
+                if (cite["URL"] != undefined) {
 		    references += " [URL](" + cite["URL"].replace(/^"/,"").replace(/"$/,"") + ")";
 		}
+
 		references += "\n\n";
 	    }
 	}
+
 	reference_cell.unrender();
 	reference_cell.set_text(references);
 	reference_cell.render();
@@ -778,25 +809,55 @@ define(["require"], function (require) {
 	// Returns dictionary with keys of #cite-KEY
 	var citations = {};
 	var refs = 1;
+        var refcount = 1;
 	for (var c in IPython.notebook.get_cells()) {
             var cell = IPython.notebook.get_cell(c);
             if (cell.cell_type == "markdown") {
 		var cell_text = cell.get_text();
+                var replacements = []
 		var re = new RegExp("\\[.*?\\]\\((\#cite-.*?)\\)", "g");
 		var match;
 		while (match = re.exec(cell_text)) {               
+                    var ref_fill = "XXXX"
                     if (match[1] in citations) {
 			citations[match[1]]["REFS"].push(refs);                    
+
+                        if (citations[match[1]]["REFCOUNT"] != undefined) {
+                            ref_fill = citations[match[1]]["REFCOUNT"].toString();
+                        }
+
                     } else {
 			var citation = match[1];
 			var lookup = document.bibliography[citation.substring(6).toUpperCase()];
 			if (lookup != undefined) {
-			    lookup["REFS"] = [refs]
+			    lookup["REFS"] = [refs];
+                            lookup["REFCOUNT"] = refcount;
+                            ref_fill = refcount.toString();
+                            refcount++;
 			    citations[match[1].toLowerCase()] = lookup;
 			}
                     }
+
+                    replacements.push("[<sup>" + ref_fill + "</sup>]" + "(" + match[1] + ")")
+
                     refs++;
 		}
+
+                //set references to refer to correct entry
+                if (replacements.length > 0) {
+                    var slices = cell_text.split(/\[.*?\]\(\#cite-.*?\)/)
+                    var new_text = slices[0]
+                    for (i = 1; i < slices.length; i++) {
+                        new_text += replacements[i-1]
+                        new_text += slices[i]
+                    }
+
+                    cell.unrender();
+                    cell.set_text(new_text);
+                    cell.render();
+                }
+
+
             }
 	}
 	return citations;
